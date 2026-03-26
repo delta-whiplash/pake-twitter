@@ -22,6 +22,15 @@ jobs:
           git config --global user.name "AUR Bot"
           git config --global user.email "aur-bot@github.com"
 
+      - name: Setup SSH
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
+
       - name: Checkout AUR repository
         run: |
           git clone ssh://aur@aur.archlinux.org/pake-twitter.git
@@ -56,13 +65,7 @@ jobs:
 
       - name: Commit and push to AUR
         if: steps.check.outputs.update_needed == 'true'
-        env:
-          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
         run: |
-          mkdir -p ~/.ssh
-          echo "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
           cd pake-twitter
           git add PKGBUILD .SRCINFO
           git commit -m "Update to v${{ steps.check.outputs.latest }}"
