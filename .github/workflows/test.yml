@@ -1,0 +1,49 @@
+name: Test PKGBUILD
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          pacman -Sy --noconfirm base-devel sudo
+
+      - name: Test makepkg
+        run: |
+          # Create build user
+          useradd -m -s /bin/bash builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+          
+          # Copy files to build directory
+          cp -r . /home/builder/pkg
+          chown -R builder:builder /home/builder/pkg
+          
+          # Test makepkg
+          cd /home/builder/pkg
+          sudo -u builder makepkg -s --noconfirm 2>&1 || {
+            echo "::error::PKGBUILD failed to build"
+            exit 1
+          }
+          
+          echo "::notice::PKGBUILD builds successfully!"
+
+      - name: Verify package
+        run: |
+          cd /home/builder/pkg
+          ls -la *.pkg.tar.zst || {
+            echo "::error::Package file not found"
+            exit 1
+          }
