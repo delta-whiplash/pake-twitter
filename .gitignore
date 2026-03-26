@@ -1,0 +1,7 @@
+# AppImages are downloaded during build, not stored in repo
+*.AppImage
+*.AppImage.*
+src/
+pkg/
+*.pkg.tar.zst
+*.pkg.tar.xz
