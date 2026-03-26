@@ -1,0 +1,69 @@
+name: Update AUR Package
+
+on:
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+
+    steps:
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm git openssh curl jq
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "AUR Bot"
+          git config --global user.email "aur-bot@github.com"
+
+      - name: Checkout AUR repository
+        run: |
+          git clone ssh://aur@aur.archlinux.org/pake-twitter.git
+          cd pake-twitter
+
+      - name: Check for Pake updates
+        id: check
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/tw93/Pake/releases/latest | jq -r '.tag_name' | sed 's/^V//')
+          echo "latest=$LATEST" >> $GITHUB_OUTPUT
+          cd pake-twitter
+          CURRENT=$(grep '^pkgver=' PKGBUILD | cut -d'=' -f2)
+          echo "current=$CURRENT" >> $GITHUB_OUTPUT
+          if [ "$LATEST" != "$CURRENT" ]; then
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+          else
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update PKGBUILD
+        if: steps.check.outputs.update_needed == 'true'
+        run: |
+          cd pake-twitter
+          NEW_VERSION=${{ steps.check.outputs.latest }}
+          sed -i "s/^pkgver=.*/pkgver=$NEW_VERSION/" PKGBUILD
+          sed -i 's/^pkgrel=.*/pkgrel=1/' PKGBUILD
+          _appname=Twitter
+          curl -L -o "${_appname}.AppImage" "https://github.com/tw93/Pake/releases/download/V${NEW_VERSION}/${_appname}_x86_64.AppImage"
+          NEW_SHA256=$(sha256sum "${_appname}.AppImage" | cut -d' ' -f1)
+          sed -i "s/^sha256sums=.*/sha256sums=('$NEW_SHA256')/" PKGBUILD
+          makepkg --printsrcinfo > .SRCINFO
+
+      - name: Commit and push to AUR
+        if: steps.check.outputs.update_needed == 'true'
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
+          cd pake-twitter
+          git add PKGBUILD .SRCINFO
+          git commit -m "Update to v${{ steps.check.outputs.latest }}"
+          git push origin master
