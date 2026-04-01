@@ -70,21 +70,29 @@ jobs:
           chmod 600 /root/.ssh/aur_key
           echo "aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN" >> /root/.ssh/known_hosts
           printf "Host aur.archlinux.org\n  IdentityFile /root/.ssh/aur_key\n  User aur\n" >> /root/.ssh/config
+          # Copy SSH config for builder user
+          mkdir -p /home/builder/.ssh
+          cp /root/.ssh/aur_key /home/builder/.ssh/
+          cp /root/.ssh/known_hosts /home/builder/.ssh/
+          cp /root/.ssh/config /home/builder/.ssh/
+          chown -R builder:builder /home/builder/.ssh
+          chmod 700 /home/builder/.ssh
+          chmod 600 /home/builder/.ssh/aur_key
 
       - name: Clone & update
         run: |
           NEW_VER="${{ needs.check.outputs.upstream_version }}"
-          git clone ssh://aur@aur.archlinux.org/${{ github.event.repository.name }}.git /home/builder/pkg
-          chown -R builder:builder /home/builder/pkg
-
+          # Clone as builder user with home directory
+          sudo -u builder HOME=/home/builder git clone ssh://aur@aur.archlinux.org/${{ github.event.repository.name }}.git /home/builder/pkg
+          
           sed -i "s/^_pkgver=.*/_pkgver=${NEW_VER}/; s/^pkgrel=.*/pkgrel=1/" /home/builder/pkg/PKGBUILD
 
-          sudo -u builder bash -c "cd /home/builder/pkg && updpkgsums && makepkg --printsrcinfo > .SRCINFO"
+          sudo -u builder bash -c 'export HOME=/home/builder && cd /home/builder/pkg && updpkgsums && makepkg --printsrcinfo > .SRCINFO'
 
-          git -C /home/builder/pkg config user.name "AUR Update Bot"
-          git -C /home/builder/pkg config user.email "bot@users.noreply.github.com"
-          git -C /home/builder/pkg add PKGBUILD .SRCINFO
-          git -C /home/builder/pkg commit -m "upgpkg: ${NEW_VER}"
-          git -C /home/builder/pkg push
+          sudo -u builder git -C /home/builder/pkg config user.name "AUR Update Bot"
+          sudo -u builder git -C /home/builder/pkg config user.email "bot@users.noreply.github.com"
+          sudo -u builder git -C /home/builder/pkg add PKGBUILD .SRCINFO
+          sudo -u builder git -C /home/builder/pkg commit -m "upgpkg: ${NEW_VER}"
+          sudo -u builder git -C /home/builder/pkg push
 
           echo "## ✅ Updated to ${NEW_VER}" >> "$GITHUB_STEP_SUMMARY"
