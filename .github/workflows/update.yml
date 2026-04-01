@@ -28,8 +28,8 @@ jobs:
             exit 1
           fi
 
-          PKGBUILD=$(curl -fsSL "https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=pake-twitter")
-          CURRENT=$(echo "$PKGBUILD" | grep '^pkgver=' | head -1 | cut -d= -f2)
+          PKGBUILD=$(curl -fsSL "https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=${{ github.event.repository.name }}")
+          CURRENT=$(echo "$PKGBUILD" | grep '^_pkgver=' | head -1 | cut -d= -f2)
 
           echo "upstream_version=${UPSTREAM}" >> "$GITHUB_OUTPUT"
           echo "current_version=${CURRENT}" >> "$GITHUB_OUTPUT"
@@ -74,10 +74,10 @@ jobs:
       - name: Clone & update
         run: |
           NEW_VER="${{ needs.check.outputs.upstream_version }}"
-          git clone ssh://aur@aur.archlinux.org/pake-twitter.git /home/builder/pkg
+          git clone ssh://aur@aur.archlinux.org/${{ github.event.repository.name }}.git /home/builder/pkg
           chown -R builder:builder /home/builder/pkg
 
-          sed -i "s/^pkgver=.*/pkgver=${NEW_VER}/; s/^pkgrel=.*/pkgrel=1/" /home/builder/pkg/PKGBUILD
+          sed -i "s/^_pkgver=.*/_pkgver=${NEW_VER}/; s/^pkgrel=.*/pkgrel=1/" /home/builder/pkg/PKGBUILD
 
           sudo -u builder bash -c "cd /home/builder/pkg && updpkgsums && makepkg --printsrcinfo > .SRCINFO"
 
